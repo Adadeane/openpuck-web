@@ -308,11 +308,17 @@
             <option value="1">Xbox Wireless Controller BLE (Native PC / Console)</option>
           </select>
         </div>
+        <div class="row" style="margin-top:10px">
+          <label>USB Output</label>
+          <button id="bleMuteUsbBtn">Mute USB Output</button>
+          <span id="usbOutputBadge" class="pill" style="margin-left:8px">—</span>
+        </div>
         <div class="row" style="margin:12px 0 0">
           <button id="blePairBtn" class="primary">Start Bluetooth Pairing</button>
           <span class="note" style="flex:1">Makes OpenPuck discoverable for 60 seconds so your TV, phone, or PC can search and pair.</span>
         </div>
-        <p class="note" style="margin-top:10px">When Bluetooth is enabled, OpenPuck forwards your Steam Controller's inputs wirelessly over Bluetooth to the connected host. When disabled, inputs route over the USB cable.</p>
+        <p class="note" style="margin-top:10px">When Bluetooth is enabled and USB output is muted (default), OpenPuck disables USB gamepad input so you can plug into a PC solely as a power source without phantom inputs bleeding into that PC.</p>
+        <p class="note" style="margin-top:6px"><strong>Controller Shortcut:</strong> Hold <strong>View + Steam</strong> (<span style="font-family:monospace">&lt;</span> + <strong>Steam</strong>) on your Steam Controller for 3 seconds to toggle Bluetooth &amp; start pairing (mutes USB). Hold for 6 seconds to turn Bluetooth off and restore USB output.</p>
       </div>
       <p id="bleOld" class="note hide">This puck's firmware predates the Bluetooth wireless output setting — update it to configure it.</p>
     </div>
@@ -1150,6 +1156,7 @@ function applyBlob(p){
     } }
   const bleCap=(p[0]>=22 && p.length>195);
   const bleState=bleCap?p[194]:0, bleProfile=bleCap?p[195]:0;
+  const bleMuteUsb=(bleCap && p.length>196)?p[196]:1;
   { const card=$("#bleCard");
     if(card){
       $("#bleBlock").classList.toggle("hide", !bleCap);
@@ -1157,6 +1164,8 @@ function applyBlob(p){
       const badge=$("#bleStatusBadge");
       const btn=$("#bleToggleBtn");
       const prof=$("#bleProfileSel");
+      const muteBtn=$("#bleMuteUsbBtn");
+      const usbBadge=$("#usbOutputBadge");
       if(badge && btn){
         if(bleState===0){
           badge.textContent="Off (USB only)";
@@ -1182,6 +1191,27 @@ function applyBlob(p){
           btn.className="";
         }
       }
+      if(muteBtn && usbBadge){
+        if(bleState===0){
+          usbBadge.textContent="Active (USB Mode)";
+          usbBadge.className="pill up";
+          muteBtn.textContent=bleMuteUsb?"USB Mute: On (when BLE active)":"USB Mute: Off (concurrent output)";
+          muteBtn.className="";
+        } else {
+          if(bleMuteUsb){
+            usbBadge.textContent="Muted (Bluetooth priority)";
+            usbBadge.className="pill dn";
+            muteBtn.textContent="Unmute USB Output";
+            muteBtn.className="";
+          } else {
+            usbBadge.textContent="Active (Concurrent with BLE)";
+            usbBadge.className="pill up";
+            muteBtn.textContent="Mute USB Output";
+            muteBtn.className="danger";
+          }
+        }
+      }
+      g_bleMuteUsb = bleMuteUsb;
       if(prof && document.activeElement!==prof) prof.value=bleProfile;
     }
   }
@@ -1811,6 +1841,9 @@ $("#demoBtn").onclick = () => {
         demoState.blePairing = true;
         log(`[Demo] BLE pairing started (${data[1]||60}s)`);
         setTimeout(() => { demoState.blePairing = false; }, (data[1]||60)*1000);
+      } else if (op === 0x1A) {
+        demoState.bleMuteUsb = (data[1] !== 0);
+        log(`[Demo] USB output when Bluetooth active: ${demoState.bleMuteUsb ? "Muted (Bluetooth priority)" : "Active (Concurrent)"}`);
       } else if (op === 0x03) {
         log(`[Demo] Switched to mode ${data[1]}`);
         demoState.mode = data[1];
@@ -1827,6 +1860,7 @@ $("#demoBtn").onclick = () => {
     bleEn: true,
     bleProfile: 0,
     blePairing: false,
+    bleMuteUsb: true,
     batt: 85,
     polls: 248,
     delivered: 247
@@ -1877,9 +1911,10 @@ $("#demoBtn").onclick = () => {
     p[62] = demoState.batt; // slot 0 battery
     p[63] = 42; // slot 0 RSSI
 
-    // BLE status (protocol v22): byte 194 = state, byte 195 = profile
+    // BLE status (protocol v22): byte 194 = state, byte 195 = profile, byte 196 = muteUsb
     p[194] = !demoState.bleEn ? 0 : (demoState.blePairing ? 2 : 1);
     p[195] = demoState.bleProfile;
+    p[196] = demoState.bleMuteUsb ? 1 : 0;
 
     return p;
   }
@@ -2455,6 +2490,13 @@ $("#blePairBtn").onclick = async () => {
   if(!dev) return;
   await send([0x19, 60]);
   log("Bluetooth pairing started (60s) — OpenPuck is now discoverable on your TV, phone, or PC!");
+};
+let g_bleMuteUsb = 1;
+$("#bleMuteUsbBtn").onclick = async () => {
+  if(!dev) return;
+  const newMute = g_bleMuteUsb ? 0 : 1;
+  await send([0x1A, newMute]);
+  log(newMute ? "USB output will be muted when Bluetooth is active" : "USB output allowed concurrently with Bluetooth");
 };
 for(const sel of document.querySelectorAll("select.chord")){
   sel.addEventListener("change", ()=>setField(CHORD_FIELD[+sel.dataset.i], +sel.value));
