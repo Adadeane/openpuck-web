@@ -130,7 +130,6 @@
   <span id="connState" class="pill dn">disconnected</span>
   <button id="connectBtn" class="primary">Connect</button>
   <button id="demoBtn" style="background:#22364f;border-color:#38618c;color:#a8d1ff" title="Simulate a connected OpenPuck for testing UI controls and telemetry">Demo Mode</button>
-  <span id="updAvail" class="pill hide" title="A newer OpenPuck release is available — click to open the Firmware update tab">…</span>
   <span class="spacer"></span>
   <button id="betaBtn" class="beta" title="Show beta features warning and enable beta UI">Beta</button>
   <button id="debugCdc" title="Reboot ONCE with the CDC serial console enabled (WebUSB goes away for that boot); auto-reverts on the next boot">Debug CDC</button>
@@ -143,11 +142,6 @@
   <p class="sub">First connect uses the Chrome/Edge device picker; reconnects are automatic. If the picker is empty, quit any app holding the device or replug.</p>
 
   <div id="panel" class="hide">
-    <div class="slot-tabs" id="mainTabs">
-      <span class="slot-tab active" data-tab="tabMain">Controller</span>
-      <span class="slot-tab" data-tab="tabUpdate">Firmware update</span>
-    </div>
-
     <div id="tabMain">
     <div class="cards">
     <div class="card wide" id="pairedCard" style="display:none">
@@ -398,36 +392,6 @@
     </div><!-- .cards -->
     </div><!-- #tabMain -->
 
-    <div id="tabUpdate" class="hide">
-      <div id="updGate" class="card hide" style="border-color:#7a2233">
-        <h2 style="color:var(--bad)">Panel updates not supported by this firmware</h2>
-        <p class="note" id="updGateMsg" style="margin:0"></p>
-      </div>
-
-      <div class="card fwupcard">
-        <h2>Update from a local file</h2>
-        <input id="uf2File" class="hide" type="file" accept=".uf2,application/octet-stream">
-        <div id="uf2Drop" class="dropzone">
-          <div><b>Drop a .uf2 file here</b> — or click to browse</div>
-          <div class="note" id="uf2Sel" style="margin-top:6px">no file selected</div>
-        </div>
-        <div class="row" style="margin:0">
-          <button id="uf2Flash" class="primary" disabled title="Pick a .uf2 file first">Flash firmware</button>
-          <span class="note" style="flex:1;margin:0">The image is streamed over WebUSB into spare flash, verified <em>on the puck</em>, and applied on an automatic reboot. Nothing is armed until it verifies — a failed or interrupted transfer leaves the running firmware untouched, and even a power cut during the apply only leaves the puck in its UF2 bootloader for drag-and-drop recovery.</span>
-        </div>
-      </div>
-
-      <div class="card fwupcard" id="relCard">
-        <h2>Update from a release</h2>
-        <div class="row" style="margin-top:0">
-          <span class="note" style="flex:1;margin:0">Official builds from <a href="https://github.com/safijari/openpuck/releases" target="_blank" rel="noopener" style="color:var(--acc2)">github.com/safijari/openpuck/releases</a> &nbsp;·&nbsp; installed: <b id="updInstalled" style="color:var(--acc)">—</b></span>
-          <button id="relRefresh">Refresh</button>
-        </div>
-        <div id="relList" class="note" style="margin:0">loading…</div>
-        <p class="note"><b style="color:var(--bad)">Factory reset</b> flashes the <code>-factory-reset</code> build of that version: on its first boot it wipes ALL settings and the controller pairing (you must re-pair), then behaves like the standard build. Use it to recover from a bad config or stale bond.</p>
-      </div>
-    </div><!-- #tabUpdate -->
-
     <div id="log"></div>
   </div>
 </div>
@@ -514,7 +478,6 @@ $("#betaBtn").classList.toggle("active", BETA_UI);
 $("#betaBtn").title = BETA_UI
   ? "Show beta-disable confirmation and return to the standard UI"
   : "Show beta warning and enable beta UI";
-$('#mainTabs .slot-tab[data-tab="tabUpdate"]').classList.toggle("beta-gated", !BETA_UI);
 function escHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
@@ -2401,30 +2364,6 @@ async function loadReleases(force){
 }
 $("#relRefresh").onclick=()=>loadReleases(true);
 
-// ---- top-level tabs ----
-for(const t of document.querySelectorAll("#mainTabs .slot-tab")){
-  t.onclick=async()=>{
-    if(t.dataset.tab==="tabUpdate" && !BETA_UI){
-      const ok=await betaPopup({
-        title:"Firmware update is beta",
-        body:["Firmware update is still being tested and may not work correctly.",
-          "A bad image or interrupted recovery path can leave you needing UF2 DFU to recover.",
-          "Enable beta mode before using this feature."],
-        okText:"Enable beta"
-      });
-      if(ok){
-        const u=new URL(location.href);
-        u.searchParams.set("beta","true");
-        location.href=u.toString();
-      }
-      return;
-    }
-    for(const x of document.querySelectorAll("#mainTabs .slot-tab")) x.classList.toggle("active",x===t);
-    $("#tabMain").classList.toggle("hide", t.dataset.tab!=="tabMain");
-    $("#tabUpdate").classList.toggle("hide", t.dataset.tab!=="tabUpdate");
-    if(t.dataset.tab==="tabUpdate") loadReleases(false); // lazy: first visit fetches the list
-  };
-}
 $("#backupExport").onclick=exportBackup;
 $("#backupImport").onclick=()=>$("#backupFile").click();
 $("#backupFile").onchange=async(e)=>{ const f=e.target.files[0]; if(f) await importBackup(f); e.target.value=""; };
