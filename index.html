@@ -129,6 +129,7 @@
   <span class="brand">OpenPuck <small>SC2 puck · WebUSB</small></span>
   <span id="connState" class="pill dn">disconnected</span>
   <button id="connectBtn" class="primary">Connect</button>
+  <button id="demoBtn" style="background:#22364f;border-color:#38618c;color:#a8d1ff" title="Simulate a connected OpenPuck for testing UI controls and telemetry">Demo Mode</button>
   <span id="updAvail" class="pill hide" title="A newer OpenPuck release is available — click to open the Firmware update tab">…</span>
   <span class="spacer"></span>
   <button id="betaBtn" class="beta" title="Show beta features warning and enable beta UI">Beta</button>
@@ -1800,6 +1801,136 @@ function buildLizardRow(b, idx){
 
 // UI wiring
 $("#connectBtn").onclick=connect;
+
+// Demo Mode simulator: allows full UI testing without a physical OpenPuck plugged in
+let isDemoMode = false, demoTimer = null;
+$("#demoBtn").onclick = () => {
+  if (isDemoMode) {
+    // Exit demo mode
+    isDemoMode = false;
+    clearInterval(demoTimer);
+    demoTimer = null;
+    dev = null;
+    polling = false;
+    $("#connState").textContent = "disconnected";
+    $("#connState").className = "pill dn";
+    $("#panel").classList.add("hide");
+    $("#demoBtn").textContent = "Demo Mode";
+    $("#demoBtn").style.background = "#22364f";
+    log("Demo Mode stopped");
+    return;
+  }
+
+  isDemoMode = true;
+  $("#demoBtn").textContent = "Exit Demo";
+  $("#demoBtn").style.background = "#5b9bd6";
+  $("#demoBtn").style.color = "#06121f";
+
+  // Create mock USB device
+  dev = {
+    opened: true,
+    vendorId: 0x28DE,
+    productId: 0x1304,
+    serialNumber: "DEMO-NRF52840-001",
+    transferOut: async (ep, data) => {
+      // Simulate command reactions
+      const op = data[0];
+      if (op === 0x02) {
+        log(`[Demo] setField(${data[1]}, ${data[2]})`);
+        demoState.fields[data[1]] = data[2];
+      } else if (op === 0x17) {
+        demoState.bleEn = data[1] !== 0;
+        log(`[Demo] BLE ${demoState.bleEn ? "enabled" : "disabled"}`);
+      } else if (op === 0x18) {
+        demoState.bleProfile = data[1];
+        log(`[Demo] BLE profile set to ${data[1] === 1 ? "Xbox" : "Universal"}`);
+      } else if (op === 0x19) {
+        demoState.blePairing = true;
+        log(`[Demo] BLE pairing started (${data[1]||60}s)`);
+        setTimeout(() => { demoState.blePairing = false; }, (data[1]||60)*1000);
+      } else if (op === 0x03) {
+        log(`[Demo] Switched to mode ${data[1]}`);
+        demoState.mode = data[1];
+      }
+      return { status: "ok" };
+    },
+    transferIn: async () => ({ status: "ok", data: new DataView(new ArrayBuffer(0)) }),
+    close: async () => {}
+  };
+
+  const demoState = {
+    mode: 0,
+    fields: {},
+    bleEn: true,
+    bleProfile: 0,
+    blePairing: false,
+    batt: 85,
+    polls: 248,
+    delivered: 247
+  };
+
+  $("#connState").textContent = "connected (demo)";
+  $("#connState").className = "pill up";
+  $("#panel").classList.remove("hide");
+  applyDeviceProfile();
+  log("Demo Mode active: simulating Steam Controller 2 on Pro Micro nRF52840");
+
+  function generateDemoBlob() {
+    const p = new Uint8Array(200);
+    p[0] = 22; // Protocol v22 with BLE
+    p[1] = demoState.mode; // Mode (0=Steam, 1=Xbox, etc.)
+    p[2] = 20; // mDiv
+    p[3] = 40; // mFric
+    p[10] = 0; // Active slot
+    p[11] = 1; // RF link UP
+    p[12] = demoState.delivered & 0xFF;
+    p[13] = (demoState.delivered >> 8) & 0xFF;
+    p[15] = 245 & 0xFF; // newps
+    p[16] = 0;
+    p[22] = 0; // persistMode
+    p[23] = 3; p[24] = 1; p[25] = 4; // Face chords
+    p[26] = demoState.polls & 0xFF;
+    p[27] = (demoState.polls >> 8) & 0xFF;
+    p[28] = 180; p[29] = 0; // loopUs
+    p[33] = 160; p[34] = 15; // pollUs
+    p[35] = 0; // logEnabled
+    p[36] = demoState.batt; // battery %
+    p[37] = 42; // RSSI dBm (-42 dBm)
+    p[38] = 0; // gitClean
+
+    // Build ID string "v0.9.7-ble"
+    const bId = "0.9.7-ble";
+    for (let i = 0; i < bId.length; i++) p[39 + i] = bId.charCodeAt(i);
+
+    // IMU accelerometer data
+    const ax = 12, ay = -25, az = 1002;
+    p[54] = ax & 0xFF; p[55] = (ax >> 8) & 0xFF;
+    p[56] = ay & 0xFF; p[57] = (ay >> 8) & 0xFF;
+    p[58] = az & 0xFF; p[59] = (az >> 8) & 0xFF;
+
+    // Slot telemetry
+    p[60] = 1; // 1 bonded slot
+    p[61] = 1; // slot 0 link UP
+    p[62] = demoState.batt; // slot 0 battery
+    p[63] = 42; // slot 0 RSSI
+
+    // BLE status (protocol v22): byte 194 = state, byte 195 = profile
+    p[194] = !demoState.bleEn ? 0 : (demoState.blePairing ? 2 : 1);
+    p[195] = demoState.bleProfile;
+
+    return p;
+  }
+
+  // Initial apply and periodic refresh
+  applyBlob(generateDemoBlob());
+  demoTimer = setInterval(() => {
+    if (!isDemoMode) return;
+    // Simulate slight natural battery/telemetry jitter
+    demoState.polls = 245 + Math.floor(Math.random() * 6);
+    demoState.delivered = demoState.polls - Math.floor(Math.random() * 2);
+    applyBlob(generateDemoBlob());
+  }, 600);
+};
 // ---- Firmware update: UF2 file -> staged flash over WebUSB, applied on reboot ----
 // Flow: parse the .uf2 into the raw app image, stream it over THIS WebUSB connection (ops 0x20/0x21/0x22,
 // strict ping-pong on the firmware's 0xAB acks) into spare flash high in the puck's app region, let the
