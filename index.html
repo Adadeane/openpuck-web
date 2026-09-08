@@ -129,7 +129,7 @@
   <span class="brand">OpenPuck <small>SC2 puck · WebUSB</small></span>
   <span id="connState" class="pill dn">disconnected</span>
   <button id="connectBtn" class="primary">Connect</button>
-  <button id="demoBtn" style="background:#1e2d42;border-color:#3a6190;color:#9bc7ff;font-weight:600" title="Simulate a connected Pro Micro nRF52840 OpenPuck for testing UI controls and telemetry">🎮 Boot Fake Pro Micro</button>
+  <button id="demoBtn" style="background:#1e2d42;border-color:#3a6190;color:#9bc7ff;font-weight:600" title="Connect to live Pro Micro nRF52840 SoC emulator (ws://127.0.0.1:8765) or run in-browser virtual chip">⚡ Connect Virtual Pro Micro</button>
   <span class="spacer"></span>
   <button id="betaBtn" class="beta" title="Show beta features warning and enable beta UI">Beta</button>
   <button id="debugCdc" title="Reboot ONCE with the CDC serial console enabled (WebUSB goes away for that boot); auto-reverts on the next boot">Debug CDC</button>
@@ -161,6 +161,19 @@
         <div class="stat"><div class="k">Panel update</div><div class="v" id="stVersionUpdate">—</div></div>
       </div>
       <p class="note">This section reflects the connected puck. Reconnect after flashing or changing modes to verify what is currently running.</p>
+    </div>
+
+    <div class="card" id="siliconCard" style="border-color:#3a6190;background:#151c28">
+      <h2>⚡ Silicon Emulation Telemetry (Nordic nRF52840 SoC)</h2>
+      <div class="statgrid">
+        <div class="stat"><div class="k">CPU Core</div><div class="v" id="simCore" style="font-size:14px;color:var(--acc2)">Cortex-M4F @ 64MHz</div></div>
+        <div class="stat"><div class="k">Program Counter (PC)</div><div class="v" id="simPC" style="font-size:15px;color:var(--acc)">0x00053411</div></div>
+        <div class="stat"><div class="k">Cycles Executed</div><div class="v" id="simCycles" style="font-size:15px">0</div></div>
+        <div class="stat"><div class="k">Radio Timeslot</div><div class="v" id="simTimeslot" style="font-size:15px;color:var(--acc)">Coexistence Active</div></div>
+        <div class="stat"><div class="k">RAM &amp;g_bleEn</div><div class="v" id="simRamBleEn" style="font-size:15px">0x20006fba = 1</div></div>
+        <div class="stat"><div class="k">RAM &amp;g_bleProfile</div><div class="v" id="simRamBleProfile" style="font-size:15px">0x20006fbb = 0</div></div>
+      </div>
+      <p class="note" style="margin-top:10px">Streaming live hardware execution state from <code>ws://127.0.0.1:8765</code> (virtual_promicro.py). Executing real ELF symbols from <code>OpenPuck.ino.elf</code>.</p>
     </div>
 
     <div class="card">
@@ -1852,17 +1865,25 @@ function generateDemoBlob() {
   return p;
 }
 
-$("#demoBtn").onclick = () => {
+let simWs = null;
+
+$("#demoBtn").onclick = async () => {
   if (isDemoMode) {
     isDemoMode = false;
-    clearInterval(demoTimer);
-    demoTimer = null;
+    if (simWs) {
+      try { simWs.close(); } catch(e){}
+      simWs = null;
+    }
+    if (demoTimer) {
+      clearInterval(demoTimer);
+      demoTimer = null;
+    }
     dev = null;
     polling = false;
     $("#connState").textContent = "disconnected";
     $("#connState").className = "pill dn";
     $("#panel").classList.add("hide");
-    $("#demoBtn").textContent = "🎮 Boot Fake Pro Micro";
+    $("#demoBtn").textContent = "⚡ Connect Virtual Pro Micro";
     $("#demoBtn").style.background = "#1e2d42";
     $("#demoBtn").style.borderColor = "#3a6190";
     $("#demoBtn").style.color = "#9bc7ff";
@@ -1871,64 +1892,121 @@ $("#demoBtn").onclick = () => {
   }
 
   isDemoMode = true;
-  $("#demoBtn").textContent = "⏹ Stop Fake Pro Micro";
+  $("#demoBtn").textContent = "⏹ Disconnect Virtual Pro Micro";
   $("#demoBtn").style.background = "#5b9bd6";
   $("#demoBtn").style.borderColor = "#5b9bd6";
   $("#demoBtn").style.color = "#06121f";
 
-  // Create mock USB device for Pro Micro nRF52840 OpenPuck
+  let liveConnected = false;
+
+  function setupFallbackDev() {
+    dev = {
+      opened: true,
+      vendorId: 0x28DE,
+      productId: 0x1304,
+      serialNumber: "PROMICRO-NRF52840-SIM",
+      productName: "Virtual Pro Micro nRF52840",
+      manufacturerName: "Valve / OpenPuck",
+      transferOut: async (ep, data) => {
+        const op = data[0];
+        if (op === 0x02) { demoState.fields[data[1]] = data[2]; log(`[Virtual Pro Micro] setField(field=${data[1]}, val=${data[2]})`); }
+        else if (op === 0x17) { demoState.bleEn = (data[1] !== 0); log(`[Virtual Pro Micro] Bluetooth ${demoState.bleEn ? "ENABLED" : "DISABLED"}`); }
+        else if (op === 0x18) { demoState.bleProfile = data[1]; log(`[Virtual Pro Micro] BLE Profile set to ${data[1] === 1 ? "Xbox Wireless" : "Universal Gamepad"}`); }
+        else if (op === 0x19) { demoState.blePairing = true; log(`[Virtual Pro Micro] 60s BLE Pairing started`); setTimeout(() => { demoState.blePairing = false; }, 15000); }
+        else if (op === 0x03) { demoState.mode = data[1]; log(`[Virtual Pro Micro] Mode changed to ${MODE_NAMES[data[1]] || data[1]}`); }
+        return { status: "ok" };
+      },
+      transferIn: async () => ({ status: "ok", data: new DataView(new ArrayBuffer(0)) }),
+      close: async () => {}
+    };
+
+    $("#connState").textContent = "connected (Virtual Pro Micro - Standalone)";
+    $("#connState").className = "pill up";
+    $("#panel").classList.remove("hide");
+    applyDeviceProfile();
+    applyBlob(generateDemoBlob());
+
+    if (!demoTimer) {
+      demoTimer = setInterval(() => {
+        if (!isDemoMode || liveConnected) return;
+        demoState.polls = 248 + Math.floor(Math.random() * 5);
+        demoState.delivered = demoState.polls - Math.floor(Math.random() * 2);
+        applyBlob(generateDemoBlob());
+      }, 500);
+    }
+  }
+
+  // Device proxy that forwards transferOut to WebSocket if open, else fallback
   dev = {
     opened: true,
     vendorId: 0x28DE,
     productId: 0x1304,
-    serialNumber: "PROMICRO-NRF52840-DEMO",
-    productName: "OpenPuck nRF52840 Gamepad",
+    serialNumber: "PROMICRO-NRF52840-SIM",
+    productName: "OpenPuck nRF52840 Virtual Gamepad",
     manufacturerName: "Valve / OpenPuck",
     transferOut: async (ep, data) => {
-      const op = data[0];
-      if (op === 0x02) {
-        demoState.fields[data[1]] = data[2];
-        log(`[Fake Pro Micro] setField(field=${data[1]}, val=${data[2]})`);
-      } else if (op === 0x17) {
-        demoState.bleEn = (data[1] !== 0);
-        log(`[Fake Pro Micro] Bluetooth ${demoState.bleEn ? "ENABLED" : "DISABLED"}`);
-      } else if (op === 0x18) {
-        demoState.bleProfile = data[1];
-        log(`[Fake Pro Micro] BLE Profile set to ${data[1] === 1 ? "Xbox Wireless Controller" : "Universal Gamepad"}`);
-      } else if (op === 0x19) {
-        demoState.blePairing = true;
-        log(`[Fake Pro Micro] 60s BLE Pairing started (LED rapid blink simulated)`);
-        setTimeout(() => {
-          if (demoState.blePairing) {
-            demoState.blePairing = false;
-            log(`[Fake Pro Micro] BLE Pairing window completed`);
-          }
-        }, 15000); // 15s simulation duration for testing
-      } else if (op === 0x03) {
-        demoState.mode = data[1];
-        log(`[Fake Pro Micro] Mode personality changed to ${MODE_NAMES[data[1]] || data[1]}`);
+      if (simWs && simWs.readyState === WebSocket.OPEN) {
+        const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('');
+        simWs.send(JSON.stringify({ type: "packet", hex: hex }));
+        return { status: "ok" };
       }
       return { status: "ok" };
     },
     transferIn: async () => ({ status: "ok", data: new DataView(new ArrayBuffer(0)) }),
-    close: async () => {}
+    close: async () => { if (simWs) simWs.close(); }
   };
 
-  $("#connState").textContent = "connected (Fake Pro Micro)";
-  $("#connState").className = "pill up";
-  $("#panel").classList.remove("hide");
-  applyDeviceProfile();
-  log("🚀 Booted virtual Pro Micro nRF52840 (OpenPuck v22) — simulating live Steam Controller 2 on Slot 1");
+  try {
+    simWs = new WebSocket("ws://127.0.0.1:8765");
+    
+    simWs.onopen = () => {
+      liveConnected = true;
+      log("⚡ Connected to Live nRF52840 SoC Hardware Emulator at ws://127.0.0.1:8765!");
+      $("#connState").textContent = "connected (Live nRF52840 SoC @ ws://127.0.0.1:8765)";
+      $("#connState").className = "pill up";
+      $("#panel").classList.remove("hide");
+      applyDeviceProfile();
+    };
 
-  // Initial apply and periodic refresh
-  applyBlob(generateDemoBlob());
-  demoTimer = setInterval(() => {
-    if (!isDemoMode) return;
-    // Simulate slight natural battery/telemetry jitter
-    demoState.polls = 248 + Math.floor(Math.random() * 5);
-    demoState.delivered = demoState.polls - Math.floor(Math.random() * 2);
-    applyBlob(generateDemoBlob());
-  }, 500);
+    simWs.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "hw_info") {
+          log(`[SoC HW] ${msg.chip} @ ${msg.clock} | Flash: ${msg.flash} | RAM: ${msg.ram} | ELF: ${msg.elf}`);
+          $("#simCore").textContent = msg.chip;
+        } else if (msg.type === "telemetry") {
+          const hex = msg.blob_b64;
+          const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+          applyBlob(bytes.slice(2));
+
+          $("#simPC").textContent = msg.pc;
+          $("#simCycles").textContent = msg.cycles.toLocaleString();
+          $("#simTimeslot").textContent = `${msg.timeslot} (Ch ${msg.radio_ch} MHz)`;
+          $("#simRamBleEn").textContent = `0x20006fba = ${msg.ram_g_bleEn}`;
+          $("#simRamBleProfile").textContent = `0x20006fbb = ${msg.ram_g_bleProfile}`;
+        }
+      } catch (err) {
+        console.error("Failed to parse telemetry:", err);
+      }
+    };
+
+    simWs.onerror = () => {
+      if (!liveConnected) {
+        log("ℹ Notice: Live nRF52840 SoC backend (ws://127.0.0.1:8765) not detected. To run real ARM Cortex-M4F emulation, run 'python simulation/virtual_promicro.py'. Falling back to internal simulation.");
+        setupFallbackDev();
+      }
+    };
+
+    simWs.onclose = () => {
+      if (liveConnected && isDemoMode) {
+        log("Virtual SoC emulator closed connection.");
+        $("#demoBtn").click();
+      }
+    };
+
+  } catch (e) {
+    setupFallbackDev();
+  }
 };
 
 // Auto-boot fake Pro Micro if URL has ?demo=1 or #demo, or if opened from local file
