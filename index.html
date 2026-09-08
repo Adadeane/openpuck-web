@@ -129,7 +129,7 @@
   <span class="brand">OpenPuck <small>SC2 puck · WebUSB</small></span>
   <span id="connState" class="pill dn">disconnected</span>
   <button id="connectBtn" class="primary">Connect</button>
-  <button id="demoBtn" style="background:#22364f;border-color:#38618c;color:#a8d1ff" title="Simulate a connected OpenPuck for testing UI controls and telemetry">Demo Mode</button>
+  <button id="demoBtn" style="background:#1e2d42;border-color:#3a6190;color:#9bc7ff;font-weight:600" title="Simulate a connected Pro Micro nRF52840 OpenPuck for testing UI controls and telemetry">🎮 Boot Fake Pro Micro</button>
   <span class="spacer"></span>
   <button id="betaBtn" class="beta" title="Show beta features warning and enable beta UI">Beta</button>
   <button id="debugCdc" title="Reboot ONCE with the CDC serial console enabled (WebUSB goes away for that boot); auto-reverts on the next boot">Debug CDC</button>
@@ -1768,9 +1768,92 @@ $("#connectBtn").onclick=connect;
 
 // Demo Mode simulator: allows full UI testing without a physical OpenPuck plugged in
 let isDemoMode = false, demoTimer = null;
+
+const demoState = {
+  mode: 0,
+  fields: {},
+  bleEn: true,
+  bleProfile: 0,
+  blePairing: false,
+  batt: 88,
+  rssi: 45,
+  polls: 250,
+  delivered: 248
+};
+
+function generateDemoBlob() {
+  const p = new Uint8Array(200);
+  p[0] = 22; // Protocol v22 with BLE
+  p[1] = demoState.mode; // Mode (0=Steam, 1=Xbox, etc.)
+  p[2] = 20; // mDiv
+  p[3] = 40; // mFric
+  p[10] = 0; // Active slot 0
+  p[11] = 1; // RF link UP
+  p[12] = demoState.delivered & 0xFF;
+  p[13] = (demoState.delivered >> 8) & 0xFF;
+  p[14] = 25; // 250 Hz poll intended
+  p[15] = 246 & 0xFF; // newps
+  p[16] = 0;
+  p[22] = 0; // persistMode
+  p[23] = 3; p[24] = 1; p[25] = 4; // Face chords (Lizard, Xbox, Switch Pro)
+  p[26] = demoState.polls & 0xFF;
+  p[27] = (demoState.polls >> 8) & 0xFF;
+  p[28] = 120; p[29] = 0; // loopUs
+  p[33] = 160; p[34] = 15; // pollUs (4000us)
+  p[35] = 0; // logEnabled
+  p[36] = demoState.batt; // battery %
+  p[37] = demoState.rssi; // RSSI dBm (-45 dBm)
+  p[38] = 0; // gitClean
+
+  // Build ID string "v0.9.7-ble"
+  const bId = "0.9.7-ble";
+  for (let i = 0; i < bId.length; i++) p[39 + i] = bId.charCodeAt(i);
+
+  // IMU accelerometer data
+  const ax = 12, ay = -25, az = 1002;
+  p[54] = ax & 0xFF; p[55] = (ax >> 8) & 0xFF;
+  p[56] = ay & 0xFF; p[57] = (ay >> 8) & 0xFF;
+  p[58] = az & 0xFF; p[59] = (az >> 8) & 0xFF;
+
+  // Slot telemetry (slot 0 online with 88% battery and -45 dBm signal)
+  p[60] = 1; // 1 bonded slot
+  p[61] = 1; // slot 0 link UP
+  p[62] = demoState.batt; // slot 0 battery
+  p[63] = demoState.rssi; // slot 0 RSSI
+
+  // Per-emulated-type button config (v10): 4 types x 9 bytes from p[75]
+  // Default: L4->LB(5), R4->RB(6), L5->L3(7), R5->R3(8)
+  for (let et = 0; et < 4; et++) {
+    const b = 75 + et * 9;
+    p[b] = 5; p[b+1] = 6; p[b+2] = 7; p[b+3] = 8;
+    p[b+4] = (et === 1 ? 18 : 0); // qamMap (Capture on Switch)
+    p[b+5] = (et === 1 ? 1 : 0);  // abSwap (Switch)
+    p[b+6] = 1; // padHaptics
+    p[b+7] = 0; // ledBright
+    p[b+8] = 1; // rumble
+  }
+
+  // Per-slot link stats (v13: js index 143..178)
+  const b0 = 143;
+  p[b0] = demoState.polls & 0xFF; p[b0+1] = (demoState.polls >> 8) & 0xFF;
+  p[b0+2] = demoState.delivered & 0xFF; p[b0+3] = (demoState.delivered >> 8) & 0xFF;
+  p[b0+4] = 246; p[b0+5] = 0;
+  p[b0+6] = 0; // crc
+  p[b0+7] = 0; // norx
+  p[b0+8] = 0; // relay
+
+  // D-pad chord defaults (PS3, DS4, PS5, Switch Hori)
+  p[180] = 9; p[181] = 8; p[182] = 7; p[183] = 2;
+
+  // BLE status (protocol v22): byte 194 = state, byte 195 = profile
+  p[194] = !demoState.bleEn ? 0 : (demoState.blePairing ? 2 : 1);
+  p[195] = demoState.bleProfile;
+
+  return p;
+}
+
 $("#demoBtn").onclick = () => {
   if (isDemoMode) {
-    // Exit demo mode
     isDemoMode = false;
     clearInterval(demoTimer);
     demoTimer = null;
@@ -1779,42 +1862,51 @@ $("#demoBtn").onclick = () => {
     $("#connState").textContent = "disconnected";
     $("#connState").className = "pill dn";
     $("#panel").classList.add("hide");
-    $("#demoBtn").textContent = "Demo Mode";
-    $("#demoBtn").style.background = "#22364f";
-    log("Demo Mode stopped");
+    $("#demoBtn").textContent = "🎮 Boot Fake Pro Micro";
+    $("#demoBtn").style.background = "#1e2d42";
+    $("#demoBtn").style.borderColor = "#3a6190";
+    $("#demoBtn").style.color = "#9bc7ff";
+    log("Virtual Pro Micro disconnected");
     return;
   }
 
   isDemoMode = true;
-  $("#demoBtn").textContent = "Exit Demo";
+  $("#demoBtn").textContent = "⏹ Stop Fake Pro Micro";
   $("#demoBtn").style.background = "#5b9bd6";
+  $("#demoBtn").style.borderColor = "#5b9bd6";
   $("#demoBtn").style.color = "#06121f";
 
-  // Create mock USB device
+  // Create mock USB device for Pro Micro nRF52840 OpenPuck
   dev = {
     opened: true,
     vendorId: 0x28DE,
     productId: 0x1304,
-    serialNumber: "DEMO-NRF52840-001",
+    serialNumber: "PROMICRO-NRF52840-DEMO",
+    productName: "OpenPuck nRF52840 Gamepad",
+    manufacturerName: "Valve / OpenPuck",
     transferOut: async (ep, data) => {
-      // Simulate command reactions
       const op = data[0];
       if (op === 0x02) {
-        log(`[Demo] setField(${data[1]}, ${data[2]})`);
         demoState.fields[data[1]] = data[2];
+        log(`[Fake Pro Micro] setField(field=${data[1]}, val=${data[2]})`);
       } else if (op === 0x17) {
-        demoState.bleEn = data[1] !== 0;
-        log(`[Demo] BLE ${demoState.bleEn ? "enabled" : "disabled"}`);
+        demoState.bleEn = (data[1] !== 0);
+        log(`[Fake Pro Micro] Bluetooth ${demoState.bleEn ? "ENABLED" : "DISABLED"}`);
       } else if (op === 0x18) {
         demoState.bleProfile = data[1];
-        log(`[Demo] BLE profile set to ${data[1] === 1 ? "Xbox" : "Universal"}`);
+        log(`[Fake Pro Micro] BLE Profile set to ${data[1] === 1 ? "Xbox Wireless Controller" : "Universal Gamepad"}`);
       } else if (op === 0x19) {
         demoState.blePairing = true;
-        log(`[Demo] BLE pairing started (${data[1]||60}s)`);
-        setTimeout(() => { demoState.blePairing = false; }, (data[1]||60)*1000);
+        log(`[Fake Pro Micro] 60s BLE Pairing started (LED rapid blink simulated)`);
+        setTimeout(() => {
+          if (demoState.blePairing) {
+            demoState.blePairing = false;
+            log(`[Fake Pro Micro] BLE Pairing window completed`);
+          }
+        }, 15000); // 15s simulation duration for testing
       } else if (op === 0x03) {
-        log(`[Demo] Switched to mode ${data[1]}`);
         demoState.mode = data[1];
+        log(`[Fake Pro Micro] Mode personality changed to ${MODE_NAMES[data[1]] || data[1]}`);
       }
       return { status: "ok" };
     },
@@ -1822,79 +1914,34 @@ $("#demoBtn").onclick = () => {
     close: async () => {}
   };
 
-  const demoState = {
-    mode: 0,
-    fields: {},
-    bleEn: true,
-    bleProfile: 0,
-    blePairing: false,
-    batt: 85,
-    polls: 248,
-    delivered: 247
-  };
-
-  $("#connState").textContent = "connected (demo)";
+  $("#connState").textContent = "connected (Fake Pro Micro)";
   $("#connState").className = "pill up";
   $("#panel").classList.remove("hide");
   applyDeviceProfile();
-  log("Demo Mode active: simulating Steam Controller 2 on Pro Micro nRF52840");
-
-  function generateDemoBlob() {
-    const p = new Uint8Array(200);
-    p[0] = 22; // Protocol v22 with BLE
-    p[1] = demoState.mode; // Mode (0=Steam, 1=Xbox, etc.)
-    p[2] = 20; // mDiv
-    p[3] = 40; // mFric
-    p[10] = 0; // Active slot
-    p[11] = 1; // RF link UP
-    p[12] = demoState.delivered & 0xFF;
-    p[13] = (demoState.delivered >> 8) & 0xFF;
-    p[15] = 245 & 0xFF; // newps
-    p[16] = 0;
-    p[22] = 0; // persistMode
-    p[23] = 3; p[24] = 1; p[25] = 4; // Face chords
-    p[26] = demoState.polls & 0xFF;
-    p[27] = (demoState.polls >> 8) & 0xFF;
-    p[28] = 180; p[29] = 0; // loopUs
-    p[33] = 160; p[34] = 15; // pollUs
-    p[35] = 0; // logEnabled
-    p[36] = demoState.batt; // battery %
-    p[37] = 42; // RSSI dBm (-42 dBm)
-    p[38] = 0; // gitClean
-
-    // Build ID string "v0.9.7-ble"
-    const bId = "0.9.7-ble";
-    for (let i = 0; i < bId.length; i++) p[39 + i] = bId.charCodeAt(i);
-
-    // IMU accelerometer data
-    const ax = 12, ay = -25, az = 1002;
-    p[54] = ax & 0xFF; p[55] = (ax >> 8) & 0xFF;
-    p[56] = ay & 0xFF; p[57] = (ay >> 8) & 0xFF;
-    p[58] = az & 0xFF; p[59] = (az >> 8) & 0xFF;
-
-    // Slot telemetry
-    p[60] = 1; // 1 bonded slot
-    p[61] = 1; // slot 0 link UP
-    p[62] = demoState.batt; // slot 0 battery
-    p[63] = 42; // slot 0 RSSI
-
-    // BLE status (protocol v22): byte 194 = state, byte 195 = profile
-    p[194] = !demoState.bleEn ? 0 : (demoState.blePairing ? 2 : 1);
-    p[195] = demoState.bleProfile;
-
-    return p;
-  }
+  log("🚀 Booted virtual Pro Micro nRF52840 (OpenPuck v22) — simulating live Steam Controller 2 on Slot 1");
 
   // Initial apply and periodic refresh
   applyBlob(generateDemoBlob());
   demoTimer = setInterval(() => {
     if (!isDemoMode) return;
     // Simulate slight natural battery/telemetry jitter
-    demoState.polls = 245 + Math.floor(Math.random() * 6);
+    demoState.polls = 248 + Math.floor(Math.random() * 5);
     demoState.delivered = demoState.polls - Math.floor(Math.random() * 2);
     applyBlob(generateDemoBlob());
-  }, 600);
+  }, 500);
 };
+
+// Auto-boot fake Pro Micro if URL has ?demo=1 or #demo, or if opened from local file
+window.addEventListener("DOMContentLoaded", () => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("demo") || window.location.hash === "#demo" || window.location.protocol === "file:") {
+    setTimeout(() => {
+      if (!dev && !isDemoMode) {
+        $("#demoBtn").click();
+      }
+    }, 200);
+  }
+});
 // ---- Firmware update: UF2 file -> staged flash over WebUSB, applied on reboot ----
 // Flow: parse the .uf2 into the raw app image, stream it over THIS WebUSB connection (ops 0x20/0x21/0x22,
 // strict ping-pong on the firmware's 0xAB acks) into spare flash high in the puck's app region, let the
