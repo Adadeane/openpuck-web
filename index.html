@@ -970,7 +970,7 @@ function applyBlob(p){
   $("#bleOld").classList.toggle("hide", bleCap);
   $("#bleBlock").classList.toggle("hide", !bleCap);
   if (bleCap) {
-    const isEn = (bleState > 0);
+    const isEn = (bleState === 1 || bleState === 2);
     $("#bleToggleBtn").textContent = isEn ? "Disable Bluetooth" : "Enable Bluetooth";
     $("#bleToggleBtn").className = isEn ? "active" : "";
     if (bleState === 2) {
@@ -979,12 +979,15 @@ function applyBlob(p){
     } else if (bleState === 1) {
       $("#bleStatusBadge").textContent = "Active / Connected";
       $("#bleStatusBadge").className = "pill up";
+    } else if (bleState === 3) {
+      $("#bleStatusBadge").textContent = "Init Error";
+      $("#bleStatusBadge").className = "pill bad";
     } else {
       $("#bleStatusBadge").textContent = "Off (USB Mode)";
       $("#bleStatusBadge").className = "pill dn";
     }
     $("#bleProfileSel").value = bleProfile;
-    $("#blePairBtn").disabled = !isEn;
+    $("#blePairBtn").disabled = (bleState === 3);
   }
   const rssi=(p.length>37?p[37]:0);
 
@@ -2368,17 +2371,20 @@ $("#bleToggleBtn").onclick = async () => {
   if(!dev) return;
   const enabling = ($("#bleToggleBtn").textContent.includes("Enable"));
   await send([0x17, enabling ? 1 : 0]);
-  log(enabling ? "Bluetooth enabled ? starting BLE gamepad service" : "Bluetooth disabled ? returning to USB mode");
+  log(enabling ? "Bluetooth enabled — starting BLE gamepad service" : "Bluetooth disabled — returning to USB mode");
+  const p = await readBlob(); if(p) applyBlob(p);
 };
 $("#bleProfileSel").addEventListener("change", async (e) => {
   if(!dev) return;
   await send([0x18, +e.target.value]);
   log("BLE profile set to: " + (+e.target.value===1 ? "Xbox Wireless Controller BLE" : "Universal BLE HID Gamepad"));
+  const p = await readBlob(); if(p) applyBlob(p);
 });
 $("#blePairBtn").onclick = async () => {
   if(!dev) return;
   await send([0x19, 60]);
-  log("Bluetooth pairing started (60s) ? OpenPuck is now discoverable on your TV, phone, or PC!");
+  log("Bluetooth pairing started (60s) — OpenPuck is now discoverable on your TV, phone, or PC!");
+  const p = await readBlob(); if(p) applyBlob(p);
 };
 for(const sel of document.querySelectorAll("select.chord")){
   sel.addEventListener("change", ()=>setField(CHORD_FIELD[+sel.dataset.i], +sel.value));
