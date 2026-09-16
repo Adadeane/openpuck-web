@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenPuck Config</title>
-<link rel="icon" type="image/x-icon" href="favicon.ico">
 <style>
   :root{ --bg:#11131a; --card:#1b1f2b; --fg:#e7ecf3; --mut:#8a93a6; --acc:#5bd6a0; --acc2:#5b9bd6; --bad:#d65b6e; --warn:#e3b341; }
   *{box-sizing:border-box}
@@ -129,7 +128,7 @@
   <span class="brand">OpenPuck <small>SC2 puck · WebUSB</small></span>
   <span id="connState" class="pill dn">disconnected</span>
   <button id="connectBtn" class="primary">Connect</button>
-  <button id="demoBtn" style="background:#22364f;border-color:#38618c;color:#a8d1ff" title="Simulate a connected OpenPuck for testing UI controls and telemetry">Demo Mode</button>
+  <span id="updAvail" class="pill hide" title="A newer OpenPuck release is available — click to open the Firmware update tab">…</span>
   <span class="spacer"></span>
   <button id="betaBtn" class="beta" title="Show beta features warning and enable beta UI">Beta</button>
   <button id="debugCdc" title="Reboot ONCE with the CDC serial console enabled (WebUSB goes away for that boot); auto-reverts on the next boot">Debug CDC</button>
@@ -142,6 +141,11 @@
   <p class="sub">First connect uses the Chrome/Edge device picker; reconnects are automatic. If the picker is empty, quit any app holding the device or replug.</p>
 
   <div id="panel" class="hide">
+    <div class="slot-tabs" id="mainTabs">
+      <span class="slot-tab active" data-tab="tabMain">Controller</span>
+      <span class="slot-tab" data-tab="tabUpdate">Firmware update</span>
+    </div>
+
     <div id="tabMain">
     <div class="cards">
     <div class="card wide" id="pairedCard" style="display:none">
@@ -210,6 +214,31 @@
       <p id="dpadOld" class="note hide">This puck's firmware predates the D-pad chords — update it to configure them.</p>
     </div>
 
+    <div class="card" id="bleCard">
+      <h2>Bluetooth Wireless Output</h2>
+      <div id="bleBlock">
+        <div class="row">
+          <label>Bluetooth Mode</label>
+          <button id="bleToggleBtn">Enable Bluetooth</button>
+          <span id="bleStatusBadge" class="pill dn" style="margin-left:8px">Off</span>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label>BLE Profile</label>
+          <select id="bleProfileSel">
+            <option value="0">Universal BLE HID Gamepad (Google TV / Android / Windows / iOS)</option>
+            <option value="1">Xbox Wireless Controller BLE (Native PC / Console)</option>
+          </select>
+        </div>
+        <div class="row" style="margin:12px 0 0">
+          <button id="blePairBtn" class="primary">Start Bluetooth Pairing</button>
+          <span class="note" style="flex:1">Makes OpenPuck discoverable for 60 seconds so your TV, phone, or PC can search and pair.</span>
+        </div>
+        <p class="note" style="margin-top:10px">When Bluetooth is enabled, OpenPuck forwards your Steam Controller's inputs wirelessly over Bluetooth and automatically disables USB gamepad output, so you can safely plug into a PC solely as a power source.</p>
+        <p class="note" style="margin-top:6px"><strong>Controller Shortcut:</strong> Hold <strong>View + Steam</strong> (&lt; + <strong>Steam</strong>) on your Steam Controller for 3 seconds to toggle Bluetooth &amp; start pairing. Hold for 6 seconds to turn Bluetooth off and restore USB output.</p>
+      </div>
+      <p id="bleOld" class="note hide">This puck's firmware predates the Bluetooth wireless output setting ? flash the custom Bluetooth build via the <em>Firmware update</em> tab to enable it.</p>
+    </div>
+
     <div class="card wide">
       <h2>Link status</h2>
 
@@ -254,6 +283,9 @@
       <div class="row" style="margin:10px 0 0"><button id="ctlrOff">Turn off controller</button>
         <span class="note" style="flex:1">Fires the controller power-off (0x9F "off!", x3) — the same path Steam's "turn off controller" and host-suspend use. Watch the link status to see it disconnect.</span>
       </div>
+      <div class="row" style="margin:10px 0 0"><button id="isMachineInternal">off</button>
+        <span class="note" style="flex:1"><strong>Emulate Steam Machine.</strong> If this setting is enabled, OpenPuck will emulate a Steam Machine's internal receiver instead of a Steam Controller Puck.</span>
+      </div>
       <div class="row debugonly" style="margin:10px 0 0;border-top:1px solid #272d3d;padding-top:14px"><button id="stabBtn">Test stability</button>
         <span class="v" id="stabStatus" style="flex:0 0 auto;min-width:120px">—</span>
         <span class="note" style="flex:1">Buzzes the controllers every 10 s (keeps them awake) and times how long the puck stays up. On a reset it records the uptime and shows it by <em>Last reset</em>; it auto-resumes after the puck reconnects. The count is kept in this tab (a page refresh clears it).</span>
@@ -291,31 +323,6 @@
         <p class="note">Strength is a percentage of the amplitude the game asked for; 200% is the shipped default, so leave it there for stock feel. Style reshapes the two motors before that scale: <strong>mono</strong> drives both at the stronger value, <strong>heavy</strong> and <strong>light</strong> mute one motor each, <strong>punchy</strong> softens weak effects while leaving strong ones alone, and <strong>soft</strong> lifts weak ones so subtle rumble is felt.</p>
       </div>
       <p id="rumbleOld" class="note hide">This puck's firmware predates the rumble-shaping settings — update it to configure them.</p>
-    </div>
-
-    <div class="card" id="bleCard">
-      <h2>Bluetooth Wireless Output</h2>
-      <div id="bleBlock">
-        <div class="row">
-          <label>Bluetooth Mode</label>
-          <button id="bleToggleBtn">Enable Bluetooth</button>
-          <span id="bleStatusBadge" class="pill" style="margin-left:8px">—</span>
-        </div>
-        <div class="row" style="margin-top:10px">
-          <label>BLE Profile</label>
-          <select id="bleProfileSel">
-            <option value="0">Universal BLE HID Gamepad (Google TV / Android / Windows / iOS)</option>
-            <option value="1">Xbox Wireless Controller BLE (Native PC / Console)</option>
-          </select>
-        </div>
-        <div class="row" style="margin:12px 0 0">
-          <button id="blePairBtn" class="primary">Start Bluetooth Pairing</button>
-          <span class="note" style="flex:1">Makes OpenPuck discoverable for 60 seconds so your TV, phone, or PC can search and pair.</span>
-        </div>
-        <p class="note" style="margin-top:10px">When Bluetooth is enabled, OpenPuck forwards your Steam Controller's inputs wirelessly over Bluetooth and automatically disables USB gamepad output, so you can safely plug into a PC solely as a power source.</p>
-        <p class="note" style="margin-top:6px"><strong>Controller Shortcut:</strong> Hold <strong>View + Steam</strong> (<span style="font-family:monospace">&lt;</span> + <strong>Steam</strong>) on your Steam Controller for 3 seconds to toggle Bluetooth &amp; start pairing. Hold for 6 seconds to turn Bluetooth off and restore USB output.</p>
-      </div>
-      <p id="bleOld" class="note hide">This puck's firmware predates the Bluetooth wireless output setting — update it to configure it.</p>
     </div>
 
     <div class="card wide">
@@ -392,6 +399,36 @@
     </div>
     </div><!-- .cards -->
     </div><!-- #tabMain -->
+
+    <div id="tabUpdate" class="hide">
+      <div id="updGate" class="card hide" style="border-color:#7a2233">
+        <h2 style="color:var(--bad)">Panel updates not supported by this firmware</h2>
+        <p class="note" id="updGateMsg" style="margin:0"></p>
+      </div>
+
+      <div class="card fwupcard">
+        <h2>Update from a local file</h2>
+        <input id="uf2File" class="hide" type="file" accept=".uf2,application/octet-stream">
+        <div id="uf2Drop" class="dropzone">
+          <div><b>Drop a .uf2 file here</b> — or click to browse</div>
+          <div class="note" id="uf2Sel" style="margin-top:6px">no file selected</div>
+        </div>
+        <div class="row" style="margin:0">
+          <button id="uf2Flash" class="primary" disabled title="Pick a .uf2 file first">Flash firmware</button>
+          <span class="note" style="flex:1;margin:0">The image is streamed over WebUSB into spare flash, verified <em>on the puck</em>, and applied on an automatic reboot. Nothing is armed until it verifies — a failed or interrupted transfer leaves the running firmware untouched, and even a power cut during the apply only leaves the puck in its UF2 bootloader for drag-and-drop recovery.</span>
+        </div>
+      </div>
+
+      <div class="card fwupcard" id="relCard">
+        <h2>Update from a release</h2>
+        <div class="row" style="margin-top:0">
+          <span class="note" style="flex:1;margin:0">Official builds from <a href="https://github.com/safijari/openpuck/releases" target="_blank" rel="noopener" style="color:var(--acc2)">github.com/safijari/openpuck/releases</a> &nbsp;·&nbsp; installed: <b id="updInstalled" style="color:var(--acc)">—</b></span>
+          <button id="relRefresh">Refresh</button>
+        </div>
+        <div id="relList" class="note" style="margin:0">loading…</div>
+        <p class="note"><b style="color:var(--bad)">Factory reset</b> flashes the <code>-factory-reset</code> build of that version: on its first boot it wipes ALL settings and the controller pairing (you must re-pair), then behaves like the standard build. Use it to recover from a bad config or stale bond.</p>
+      </div>
+    </div><!-- #tabUpdate -->
 
     <div id="log"></div>
   </div>
@@ -479,6 +516,7 @@ $("#betaBtn").classList.toggle("active", BETA_UI);
 $("#betaBtn").title = BETA_UI
   ? "Show beta-disable confirmation and return to the standard UI"
   : "Show beta warning and enable beta UI";
+$('#mainTabs .slot-tab[data-tab="tabUpdate"]').classList.toggle("beta-gated", !BETA_UI);
 function escHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
@@ -768,7 +806,7 @@ function renderSlotTabs(bondedCount) {
 
 // Every VID an OpenPuck can enumerate under — the picker/auto-reconnect can only see a device whose VID is
 // listed here, so a new mode with a new identity MUST be added (1209 = DirectInput, 2E8A = SInput).
-const USB_FILTERS=[{vendorId:0x28DE},{vendorId:0x045E},{vendorId:0x057E},{vendorId:0x0F0D},{vendorId:0x054C},{vendorId:0x1209},{vendorId:0x2E8A}];
+const USB_FILTERS=[{vendorId:0x28DE},{vendorId:0x045E},{vendorId:0x057E},{vendorId:0x0F0D},{vendorId:0x054C},{vendorId:0x1209},{vendorId:0x2E8A},{vendorId:0x239A},{vendorId:0x1B4F},{vendorId:0x1915}];
 // Acquire+set up an already-chosen USBDevice (shared by the manual picker and the no-picker auto-reconnect).
 async function openDevice(d){
   try{
@@ -925,6 +963,29 @@ function applyBlob(p){
   // Rumble shaping (protocol v21): firmware p[53]/p[195] = payload p[51]/p[193]. Strength is percent/2.
   const rumbleCap=(p[0]>=21 && p.length>193);
   const rumbleScale=rumbleCap?p[51]*2:200, rumbleStyle=rumbleCap?p[193]:0;
+  // Bluetooth Wireless Output (protocol v22, firmware p[196..197] = payload p[194..195])
+  const bleCap = (p[0] >= 22 && p.length > 195);
+  const bleState = bleCap ? p[194] : 0;
+  const bleProfile = bleCap ? p[195] : 0;
+  $("#bleOld").classList.toggle("hide", bleCap);
+  $("#bleBlock").classList.toggle("hide", !bleCap);
+  if (bleCap) {
+    const isEn = (bleState > 0);
+    $("#bleToggleBtn").textContent = isEn ? "Disable Bluetooth" : "Enable Bluetooth";
+    $("#bleToggleBtn").className = isEn ? "active" : "";
+    if (bleState === 2) {
+      $("#bleStatusBadge").textContent = "Pairing (60s)";
+      $("#bleStatusBadge").className = "pill beta";
+    } else if (bleState === 1) {
+      $("#bleStatusBadge").textContent = "Active / Connected";
+      $("#bleStatusBadge").className = "pill up";
+    } else {
+      $("#bleStatusBadge").textContent = "Off (USB Mode)";
+      $("#bleStatusBadge").className = "pill dn";
+    }
+    $("#bleProfileSel").value = bleProfile;
+    $("#blePairBtn").disabled = !isEn;
+  }
   const rssi=(p.length>37?p[37]:0);
 
   // per-slot link status (protocol v8, p.length >= 73)
@@ -1108,6 +1169,7 @@ function applyBlob(p){
   checkUpdateNotice(); // needs BOTH the installed version (this blob) and relCache (fetched on connect)
   setSlider("mDiv",mDiv); setSlider("mFric",mFric);
   $("#persistMode").textContent = persistMode? "on":"off"; $("#persistMode").classList.toggle("active",!!persistMode);
+  { const la=(p.length>179?p[179] === 0xEE:false); $("#isMachineInternal").textContent = la?"on":"off"; $("#isMachineInternal").classList.toggle("active",!!la); }
   // per-type button config (blob v10/v17): 4 types x 9 bytes. readBlob() strips the 2-byte [0xA5][len] header, so
   // the firmware's buffer index 75 lands at JS index 73 here.
   if(p.length>=73+TYPE_DEFS.length*9){
@@ -1149,43 +1211,6 @@ function applyBlob(p){
       // a strength set from the console can land between the presets -- show the nearest one
       if(document.activeElement!==scl) scl.value=RUMBLE_SCALES.reduce((a,b)=>Math.abs(b-rumbleScale)<Math.abs(a-rumbleScale)?b:a);
     } }
-  const bleCap=(p[0]>=22 && p.length>195);
-  const bleState=bleCap?p[194]:0, bleProfile=bleCap?p[195]:0;
-  { const card=$("#bleCard");
-    if(card){
-      $("#bleBlock").classList.toggle("hide", !bleCap);
-      $("#bleOld").classList.toggle("hide", bleCap);
-      const badge=$("#bleStatusBadge");
-      const btn=$("#bleToggleBtn");
-      const prof=$("#bleProfileSel");
-      if(badge && btn){
-        if(bleState===0){
-          badge.textContent="Off (USB only)";
-          badge.className="pill dn";
-          btn.textContent="Enable Bluetooth";
-          btn.className="";
-        } else if(bleState===1){
-          badge.textContent="Active (Bluetooth)";
-          badge.className="pill up";
-          btn.textContent="Disable Bluetooth";
-          btn.className="danger";
-        } else if(bleState===2){
-          badge.textContent="Pairing Mode (Discoverable)";
-          badge.className="pill";
-          badge.style.background="#3a3216";
-          badge.style.color="#e5c76b";
-          btn.textContent="Disable Bluetooth";
-          btn.className="danger";
-        } else {
-          badge.textContent="Failed to Start";
-          badge.className="pill dn";
-          btn.textContent="Enable Bluetooth";
-          btn.className="";
-        }
-      }
-      if(prof && document.activeElement!==prof) prof.value=bleProfile;
-    }
-  }
   for(const sel of document.querySelectorAll("select.chord")){ if(document.activeElement!==sel) sel.value=chord[+sel.dataset.i]; }
   $("#dpadChords").classList.toggle("hide", !dpadCap);
   $("#dpadOld").classList.toggle("hide", dpadCap);
@@ -1292,6 +1317,7 @@ function buildBackup(p, bp){
   // those settings existed carry rumble/swProRate/swGyro10 keys instead — now-removed settings, ignored.)
   if(p[0]>=18 && p.length>183) cfg.chordD=[p[180],p[181],p[182],p[183]];
   if(p[0]>=19 && p.length>184) cfg.swGyroLegacy=p[184];
+  if(p[0]>=21 && p.length>179) cfg.emulateSteamMachine=p[179];
   // version 2: include the lizard map so it survives a backup/restore cycle.
   // Guard on !lizardBusy to avoid a race with the one-shot lazy load (lizardExchange sets
   // lizardBusy while the initial 0x11 fetch is in flight); if the load is still pending the
@@ -1374,6 +1400,8 @@ async function importBackup(file){
     // Switch Pro gyro mapping (v19+ backups only). Backups also carry rumble/swProRate/swGyro10 from the
     // removed settings; those fields no longer exist on the puck, so they are not replayed.
     if(c.swGyroLegacy!==undefined) await sf(38, c.swGyroLegacy?1:0);
+    if(c.emulateSteamMachine!==undefined) await sf(29, c.emulateSteamMachine==0xEE?1:0);
+    
     // c.types is absent in some very old backups created before per-type paddle/haptic config
     // was added to the panel export; guard so a missing field never crashes the import mid-flight.
     if(typeN){
@@ -1765,136 +1793,6 @@ function buildLizardRow(b, idx){
 
 // UI wiring
 $("#connectBtn").onclick=connect;
-
-// Demo Mode simulator: allows full UI testing without a physical OpenPuck plugged in
-let isDemoMode = false, demoTimer = null;
-$("#demoBtn").onclick = () => {
-  if (isDemoMode) {
-    // Exit demo mode
-    isDemoMode = false;
-    clearInterval(demoTimer);
-    demoTimer = null;
-    dev = null;
-    polling = false;
-    $("#connState").textContent = "disconnected";
-    $("#connState").className = "pill dn";
-    $("#panel").classList.add("hide");
-    $("#demoBtn").textContent = "Demo Mode";
-    $("#demoBtn").style.background = "#22364f";
-    log("Demo Mode stopped");
-    return;
-  }
-
-  isDemoMode = true;
-  $("#demoBtn").textContent = "Exit Demo";
-  $("#demoBtn").style.background = "#5b9bd6";
-  $("#demoBtn").style.color = "#06121f";
-
-  // Create mock USB device
-  dev = {
-    opened: true,
-    vendorId: 0x28DE,
-    productId: 0x1304,
-    serialNumber: "DEMO-NRF52840-001",
-    transferOut: async (ep, data) => {
-      // Simulate command reactions
-      const op = data[0];
-      if (op === 0x02) {
-        log(`[Demo] setField(${data[1]}, ${data[2]})`);
-        demoState.fields[data[1]] = data[2];
-      } else if (op === 0x17) {
-        demoState.bleEn = data[1] !== 0;
-        log(`[Demo] BLE ${demoState.bleEn ? "enabled" : "disabled"}`);
-      } else if (op === 0x18) {
-        demoState.bleProfile = data[1];
-        log(`[Demo] BLE profile set to ${data[1] === 1 ? "Xbox" : "Universal"}`);
-      } else if (op === 0x19) {
-        demoState.blePairing = true;
-        log(`[Demo] BLE pairing started (${data[1]||60}s)`);
-        setTimeout(() => { demoState.blePairing = false; }, (data[1]||60)*1000);
-      } else if (op === 0x03) {
-        log(`[Demo] Switched to mode ${data[1]}`);
-        demoState.mode = data[1];
-      }
-      return { status: "ok" };
-    },
-    transferIn: async () => ({ status: "ok", data: new DataView(new ArrayBuffer(0)) }),
-    close: async () => {}
-  };
-
-  const demoState = {
-    mode: 0,
-    fields: {},
-    bleEn: true,
-    bleProfile: 0,
-    blePairing: false,
-    batt: 85,
-    polls: 248,
-    delivered: 247
-  };
-
-  $("#connState").textContent = "connected (demo)";
-  $("#connState").className = "pill up";
-  $("#panel").classList.remove("hide");
-  applyDeviceProfile();
-  log("Demo Mode active: simulating Steam Controller 2 on Pro Micro nRF52840");
-
-  function generateDemoBlob() {
-    const p = new Uint8Array(200);
-    p[0] = 22; // Protocol v22 with BLE
-    p[1] = demoState.mode; // Mode (0=Steam, 1=Xbox, etc.)
-    p[2] = 20; // mDiv
-    p[3] = 40; // mFric
-    p[10] = 0; // Active slot
-    p[11] = 1; // RF link UP
-    p[12] = demoState.delivered & 0xFF;
-    p[13] = (demoState.delivered >> 8) & 0xFF;
-    p[15] = 245 & 0xFF; // newps
-    p[16] = 0;
-    p[22] = 0; // persistMode
-    p[23] = 3; p[24] = 1; p[25] = 4; // Face chords
-    p[26] = demoState.polls & 0xFF;
-    p[27] = (demoState.polls >> 8) & 0xFF;
-    p[28] = 180; p[29] = 0; // loopUs
-    p[33] = 160; p[34] = 15; // pollUs
-    p[35] = 0; // logEnabled
-    p[36] = demoState.batt; // battery %
-    p[37] = 42; // RSSI dBm (-42 dBm)
-    p[38] = 0; // gitClean
-
-    // Build ID string "v0.9.7-ble"
-    const bId = "0.9.7-ble";
-    for (let i = 0; i < bId.length; i++) p[39 + i] = bId.charCodeAt(i);
-
-    // IMU accelerometer data
-    const ax = 12, ay = -25, az = 1002;
-    p[54] = ax & 0xFF; p[55] = (ax >> 8) & 0xFF;
-    p[56] = ay & 0xFF; p[57] = (ay >> 8) & 0xFF;
-    p[58] = az & 0xFF; p[59] = (az >> 8) & 0xFF;
-
-    // Slot telemetry
-    p[60] = 1; // 1 bonded slot
-    p[61] = 1; // slot 0 link UP
-    p[62] = demoState.batt; // slot 0 battery
-    p[63] = 42; // slot 0 RSSI
-
-    // BLE status (protocol v22): byte 194 = state, byte 195 = profile
-    p[194] = !demoState.bleEn ? 0 : (demoState.blePairing ? 2 : 1);
-    p[195] = demoState.bleProfile;
-
-    return p;
-  }
-
-  // Initial apply and periodic refresh
-  applyBlob(generateDemoBlob());
-  demoTimer = setInterval(() => {
-    if (!isDemoMode) return;
-    // Simulate slight natural battery/telemetry jitter
-    demoState.polls = 245 + Math.floor(Math.random() * 6);
-    demoState.delivered = demoState.polls - Math.floor(Math.random() * 2);
-    applyBlob(generateDemoBlob());
-  }, 600);
-};
 // ---- Firmware update: UF2 file -> staged flash over WebUSB, applied on reboot ----
 // Flow: parse the .uf2 into the raw app image, stream it over THIS WebUSB connection (ops 0x20/0x21/0x22,
 // strict ping-pong on the firmware's 0xAB acks) into spare flash high in the puck's app region, let the
@@ -2365,6 +2263,30 @@ async function loadReleases(force){
 }
 $("#relRefresh").onclick=()=>loadReleases(true);
 
+// ---- top-level tabs ----
+for(const t of document.querySelectorAll("#mainTabs .slot-tab")){
+  t.onclick=async()=>{
+    if(t.dataset.tab==="tabUpdate" && !BETA_UI){
+      const ok=await betaPopup({
+        title:"Firmware update is beta",
+        body:["Firmware update is still being tested and may not work correctly.",
+          "A bad image or interrupted recovery path can leave you needing UF2 DFU to recover.",
+          "Enable beta mode before using this feature."],
+        okText:"Enable beta"
+      });
+      if(ok){
+        const u=new URL(location.href);
+        u.searchParams.set("beta","true");
+        location.href=u.toString();
+      }
+      return;
+    }
+    for(const x of document.querySelectorAll("#mainTabs .slot-tab")) x.classList.toggle("active",x===t);
+    $("#tabMain").classList.toggle("hide", t.dataset.tab!=="tabMain");
+    $("#tabUpdate").classList.toggle("hide", t.dataset.tab!=="tabUpdate");
+    if(t.dataset.tab==="tabUpdate") loadReleases(false); // lazy: first visit fetches the list
+  };
+}
 $("#backupExport").onclick=exportBackup;
 $("#backupImport").onclick=()=>$("#backupFile").click();
 $("#backupFile").onchange=async(e)=>{ const f=e.target.files[0]; if(f) await importBackup(f); e.target.value=""; };
@@ -2430,6 +2352,7 @@ $("#wipeBoard").onclick=async()=>{
   log("FULL BOARD WIPE sent — the board is erasing firmware + all data (~15–20 s), then reboots as a blank UF2 drive. Flash OpenPuck (.uf2) to restore it.");
 };
 $("#persistMode").onclick=()=>{ const on=$("#persistMode").classList.contains("active"); setField(16, on?0:1); };
+$("#isMachineInternal").onclick=async()=>{ const on=$("#isMachineInternal").classList.contains("active"); await setField(29, on?0:1); };
 // Connection tuning: post-connect haptic block on (field 27) + seconds (field 28). (poll RX window is fixed.)
 for(const id of ["mDiv","mFric"]){
   const field={mDiv:1,mFric:2}[id];
@@ -2445,7 +2368,7 @@ $("#bleToggleBtn").onclick = async () => {
   if(!dev) return;
   const enabling = ($("#bleToggleBtn").textContent.includes("Enable"));
   await send([0x17, enabling ? 1 : 0]);
-  log(enabling ? "Bluetooth enabled — starting BLE gamepad service" : "Bluetooth disabled — returning to USB mode");
+  log(enabling ? "Bluetooth enabled ? starting BLE gamepad service" : "Bluetooth disabled ? returning to USB mode");
 };
 $("#bleProfileSel").addEventListener("change", async (e) => {
   if(!dev) return;
@@ -2455,7 +2378,7 @@ $("#bleProfileSel").addEventListener("change", async (e) => {
 $("#blePairBtn").onclick = async () => {
   if(!dev) return;
   await send([0x19, 60]);
-  log("Bluetooth pairing started (60s) — OpenPuck is now discoverable on your TV, phone, or PC!");
+  log("Bluetooth pairing started (60s) ? OpenPuck is now discoverable on your TV, phone, or PC!");
 };
 for(const sel of document.querySelectorAll("select.chord")){
   sel.addEventListener("change", ()=>setField(CHORD_FIELD[+sel.dataset.i], +sel.value));
