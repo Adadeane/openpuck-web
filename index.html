@@ -214,34 +214,6 @@
       <p id="dpadOld" class="note hide">This puck's firmware predates the D-pad chords — update it to configure them.</p>
     </div>
 
-    <div class="card" id="bleCard">
-      <h2>Bluetooth Wireless Output</h2>
-      <div id="bleBlock">
-        <div class="row">
-          <label>Bluetooth Mode</label>
-          <button id="bleToggleBtn">Enable Bluetooth</button>
-          <span id="bleStatusBadge" class="pill dn" style="margin-left:8px">Off</span>
-        </div>
-        <div class="row" style="margin-top:10px">
-          <label>BLE Profile</label>
-          <select id="bleProfileSel">
-            <option value="0">Universal BLE HID Gamepad (Google TV / Android / Windows / iOS)</option>
-            <option value="1">Xbox Wireless Controller BLE (Native PC / Console)</option>
-          </select>
-        </div>
-        <div class="row" style="margin:12px 0 0">
-          <button id="blePairBtn" class="primary">Start Bluetooth Pairing</button>
-          <span class="note" style="flex:1">Makes OpenPuck discoverable for 60 seconds so your TV, phone, or PC can search and pair.</span>
-        </div>
-        <p class="note" style="margin-top:10px">When Bluetooth is enabled, OpenPuck forwards your Steam Controller's inputs wirelessly over Bluetooth and automatically disables USB gamepad output, so you can safely plug into a PC solely as a power source.</p>
-        <p class="note" style="margin-top:6px"><strong>Controller Shortcut:</strong> Hold <strong>View + Steam</strong> (&lt; + <strong>Steam</strong>) on your Steam Controller for 3 seconds to toggle Bluetooth &amp; start pairing. Hold for 6 seconds to turn Bluetooth off and restore USB output.</p>
-      </div>
-      <p id="bleOld" class="note hide">This puck's firmware predates the Bluetooth wireless output setting ? flash the custom Bluetooth build via the <em>Firmware update</em> tab to enable it.</p>
-    </div>
-
-    <div class="card wide">
-      <h2>Link status</h2>
-
       <!-- Per-controller tabs: visible only when 2+ controllers are bonded -->
       <div class="slot-tabs" id="slotTabs" style="display:none"></div>
 
